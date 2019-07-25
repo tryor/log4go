@@ -59,14 +59,18 @@ func (w *FileLogWriter) Close() {
 //
 // The standard log-line format is:
 //   [%D %T] [%L] (%S) %M
-func NewFileLogWriter(fname string, rotate bool) *FileLogWriter {
+func NewFileLogWriter(fname string, rotate bool, format string, maxlines int, maxsize int, daily bool) *FileLogWriter {
 	w := &FileLogWriter{
-		rec:       make(chan *LogRecord, LogBufferLength),
-		rot:       make(chan bool),
-		filename:  fname,
-		format:    "[%D %T] [%L] (%S) %M",
-		rotate:    rotate,
-		maxbackup: 999,
+		rec:            make(chan *LogRecord, LogBufferLength),
+		rot:            make(chan bool),
+		filename:       fname,
+		format:         format, //"[%D %T] [%L] (%S) %M",
+		rotate:         rotate,
+		maxbackup:      999,
+		maxlines:       maxlines,
+		maxsize:        maxsize,
+		daily:          daily,
+		daily_opendate: time.Now().Day(),
 	}
 
 	// open the file for the first time
@@ -152,7 +156,7 @@ func (w *FileLogWriter) intRotate() error {
 				if err == nil {
 					return fmt.Errorf("Rotate: Cannot find free log number to rename %s\n", w.filename)
 				}
-			} else {
+			} else if !w.daily {
 				num = w.maxbackup - 1
 				for ; num >= 1; num-- {
 					fname = w.filename + fmt.Sprintf(".%d", num)
@@ -165,10 +169,13 @@ func (w *FileLogWriter) intRotate() error {
 			}
 
 			w.file.Close()
-			// Rename the file to its newfound home
-			err = os.Rename(w.filename, fname)
-			if err != nil {
-				return fmt.Errorf("Rotate: %s\n", err)
+
+			if len(fname) > 0 {
+				// Rename the file to its newfound home
+				err = os.Rename(w.filename, fname)
+				if err != nil {
+					return fmt.Errorf("Rotate: %s\n", err)
+				}
 			}
 		}
 	}
@@ -254,11 +261,11 @@ func (w *FileLogWriter) SetRotate(rotate bool) *FileLogWriter {
 
 // NewXMLLogWriter is a utility method for creating a FileLogWriter set up to
 // output XML record log messages instead of line-based ones.
-func NewXMLLogWriter(fname string, rotate bool) *FileLogWriter {
-	return NewFileLogWriter(fname, rotate).SetFormat(
-		`	<record level="%L">
+func NewXMLLogWriter(fname string, rotate bool, maxlines int, maxsize int, daily bool) *FileLogWriter {
+	format := `	<record level="%L">
 		<timestamp>%D %T</timestamp>
 		<source>%S</source>
 		<message>%M</message>
-	</record>`).SetHeadFoot("<log created=\"%D %T\">", "</log>")
+	</record>`
+	return NewFileLogWriter(fname, rotate, format, maxlines, maxsize, daily).SetHeadFoot("<log created=\"%D %T\">", "</log>")
 }
