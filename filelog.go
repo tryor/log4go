@@ -73,6 +73,11 @@ func NewFileLogWriter(fname string, rotate bool, format string, maxlines int, ma
 		daily_opendate: time.Now().Day(),
 	}
 
+	fileinfo, err := os.Lstat(w.filename)
+	if err == nil {
+		w.daily_opendate = fileinfo.ModTime().Day()
+	}
+
 	// open the file for the first time
 	if err := w.intRotate(); err != nil {
 		fmt.Fprintf(os.Stderr, "FileLogWriter(%q): %s\n", w.filename, err)
@@ -145,6 +150,7 @@ func (w *FileLogWriter) intRotate() error {
 			// Find the next available number
 			num := 1
 			fname := ""
+
 			if w.daily && time.Now().Day() != w.daily_opendate {
 				yesterday := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 
